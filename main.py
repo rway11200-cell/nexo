@@ -118,9 +118,15 @@ def get_monthly_spent() -> int:
 def send_telegram(message: str):
     """Send message to the budget Telegram group."""
     if not TELEGRAM_BOT_TOKEN:
+        app.logger.error("TELEGRAM_BOT_TOKEN not set")
+        return
+    if not TELEGRAM_GROUP_ID:
+        app.logger.error("TELEGRAM_GROUP_ID not set")
         return
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-    requests.post(url, json={"chat_id": TELEGRAM_GROUP_ID, "text": message})
+    resp = requests.post(url, json={"chat_id": TELEGRAM_GROUP_ID, "text": message}, timeout=10)
+    if not resp.ok:
+        app.logger.error(f"Telegram send failed: {resp.status_code} {resp.text}")
 
 
 @app.route("/")
