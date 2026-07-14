@@ -36,15 +36,28 @@ def infer_category(comercio: str) -> str:
     return "otro"
 
 
+def is_relevant_notification(text: str) -> bool:
+    """Check if the notification is a relevant expense (CMR purchase)."""
+    text_lower = text.lower()
+    ignore_keywords = ["charging", "battery", "%evtprm", "puntos", "oferta", "avance", "no te pierdas"]
+    for kw in ignore_keywords:
+        if kw in text_lower:
+            return False
+    return True
+
+
 def parse_cmr(text: str) -> dict | None:
     """Parse CMR notification text. Returns {amount, merchant, date} or None."""
+    # Clean Tasker placeholders
+    clean = re.sub(r'%20|%evtprm\d|%NTITLE|%NTEXT|cl\.android', '', text).strip()
+    
     # Pattern: "Compraste $X.XXX en MERCHANT ... CHL"
     pattern = r"Compraste\s+\$?([\d.]+)\s+en\s+(.+?)(?:\s+(?:SANTIAGO|CHL|Las Condes|Con tu))"
-    match = re.search(pattern, text, re.IGNORECASE)
+    match = re.search(pattern, clean, re.IGNORECASE)
     if not match:
-        # Try simpler: "Compraste $X.XXX en ..."
-        pattern2 = r"Compraste\s+\$?([\d.]+)\s+en\s+(.+)"
-        match = re.search(pattern2, text, re.IGNORECASE)
+        # Try simpler: "Compraste $X.XXX en ... CON TU"
+        pattern2 = r"Compraste\s+\$?([\d.]+)\s+en\s+(.+?)(?:\s+Con tu)"
+        match = re.search(pattern2, clean, re.IGNORECASE)
     if match:
         amount_str = match.group(1).replace(".", "")
         merchant = match.group(2).strip()[:60]
@@ -157,11 +170,15 @@ def tasker_webhook():
     """Endpoint that Tasker calls with CMR notifications."""
     text = request.args.get("text", "")
     if not text:
-        return jsonify({"error": "no text"}), 400
+        return jsonify({"ok": False, "reason": "no text"}), 200
+
+    # Silently ignore non-CMR notifications (battery, offers, etc.)
+    if not is_relevant_notification(text):
+        return jsonify({"ok": True, "reason": "ignored"}), 200
 
     parsed = parse_cmr(text)
     if not parsed:
-        return jsonify({"error": "could not parse", "text": text[:100]}), 400
+        return jsonify({"ok": True, "reason": "not a CMR purchase"}), 200
 
     amount = parsed["amount"]
     merchant = parsed["merchant"]
