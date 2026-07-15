@@ -145,6 +145,62 @@ def send_telegram(message: str):
         app.logger.error(f"Telegram send failed: {resp.status_code} {resp.text}")
 
 
+def get_budget_summary(period_page_id: str = "", budget: int = 1_000_000) -> dict:
+    """Get full budget summary: spent, remaining, days, percentages."""
+    spent = get_monthly_spent(period_page_id)
+    remaining = budget - spent
+    today = datetime.now()
+    days_in_month = (today.replace(month=today.month % 12 + 1, day=1) - today.replace(day=1)).days
+    day_of_month = today.day
+    month_pct = round(day_of_month / days_in_month * 100)
+    spent_pct = round(spent / budget * 100) if budget > 0 else 0
+    pace = round(spent_pct / month_pct * 100) if month_pct > 0 else 0
+
+    # Recommendation
+    if remaining < 0:
+        advice = "🔴 ¡Te pasaste del presupuesto!"
+    elif spent_pct > month_pct + 10:
+        advice = "⚠️ Vas más gastado de lo que deberías al día de hoy"
+    elif spent_pct > month_pct:
+        advice = "🟡 Llevas un poco más gastado del ideal"
+    elif spent_pct < month_pct - 10:
+        advice = "🟢 Vas bien! Estás gastando menos de lo esperado"
+    else:
+        advice = "✅ Vas al día con el presupuesto"
+
+    return {
+        "spent": spent,
+        "remaining": remaining,
+        "budget": budget,
+        "day": day_of_month,
+        "days_total": days_in_month,
+        "month_pct": month_pct,
+        "spent_pct": spent_pct,
+        "pace": pace,
+        "advice": advice,
+    }
+
+
+def format_budget_summary(s: dict, merchant: str = "", amount: int = 0, category: str = "", source: str = ""):
+    """Format a budget summary into a Telegram message."""
+    lines = []
+    if merchant:
+        lines.append(f"✅ **${amount:,}** registrado en *{merchant}* ({source})")
+        lines.append(f"📂 Categoría: {category}")
+    lines.append("")
+    lines.append(f"📊 Día {s['day']} de {s['days_total']} ({s['month_pct']}% del mes)")
+    lines.append(f"💰 Gastado: **${s['spent']:,}** ({s['spent_pct']}% del presupuesto)")
+    lines.append(f"💵 Restante: **${s['remaining']:,}** de ${s['budget']:,}")
+    if s['pace'] > 120:
+        lines.append(f"⚡ Ritmo: {s['pace']}% 🔴 (gastando más rápido de lo esperado)")
+    elif s['pace'] < 80:
+        lines.append(f"🐢 Ritmo: {s['pace']}% 🟢 (gastando más lento)")
+    else:
+        lines.append(f"🎯 Ritmo: {s['pace']}% ✅")
+    lines.append(f"💬 {s['advice']}")
+    return "\n".join(lines)
+
+
 def process_and_respond(amount: int, merchant: str, category: str, source: str):
     """Register expense, get budget, send Telegram, return JSON."""
     active = get_active_period()
@@ -152,30 +208,17 @@ def process_and_respond(amount: int, merchant: str, category: str, source: str):
     budget = active[0] if active else 1_000_000
 
     registered = register_notion(amount, merchant, category, source, period_page_id)
-    spent = get_monthly_spent(period_page_id)
-    remaining = budget - spent - amount
 
-    # Get period name from active
-    period_name = "del periodo"
-    if active:
-        period_name = f"de {active[1][:8]}..."  # Will be replaced with proper name
+    summary = get_budget_summary(period_page_id, budget)
+    # Adjust for current expense (already registered)
+    summary["spent"] += amount
+    summary["remaining"] = budget - summary["spent"]
+    summary["spent_pct"] = round(summary["spent"] / budget * 100) if budget > 0 else 0
 
-    response = (
-        f"✅ **${amount:,}** registrado en *{merchant}* ({source})\n"
-        f"📂 Categoría: {category}\n"
-        f"💰 Te quedan **${remaining:,}** del presupuesto"
-    )
-    send_telegram(response)
+    msg = format_budget_summary(summary, merchant, amount, category, source)
+    send_telegram(msg)
 
-    return jsonify({
-        "status": "ok",
-        "amount": amount,
-        "merchant": merchant,
-        "category": category,
-        "source": source,
-        "remaining": remaining,
-        "budget": budget,
-    })
+    return jsonify(summary)
 
 
 # ---- PARSERS ----
@@ -223,6 +266,16 @@ def parse_scotiabank(text: str) -> dict | None:
 @app.route("/")
 def home():
     return jsonify({"status": "ok", "service": "budget-webhook"})
+
+
+@app.route("/status", methods=["GET"])
+def budget_status():
+    """Get current budget status — useful for Fosforito to answer questions."""
+    active = get_active_period()
+    period_page_id = active[1] if active else ""
+    budget = active[0] if active else 1_000_000
+    summary = get_budget_summary(period_page_id, budget)
+    return jsonify(summary)
 
 
 @app.route("/test-telegram", methods=["GET"])
