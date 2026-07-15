@@ -48,12 +48,12 @@ def get_active_period() -> tuple[int, str] | None:
         return None
     headers = {
         "Authorization": f"Bearer {NOTION_API_KEY}",
-        "Notion-Version": "2025-09-03",
+        "Notion-Version": "2022-06-28",
         "Content-Type": "application/json",
     }
     data = {"filter": {"property": "Activo", "checkbox": {"equals": True}}, "page_size": 1}
     resp = requests.post(
-        f"https://api.notion.com/v1/data_sources/{PERIODO_DB}/query",
+        f"https://api.notion.com/v1/databases/{PERIODO_DB}/query",
         headers=headers,
         json=data,
     )
@@ -106,7 +106,7 @@ def get_monthly_spent(period_page_id: str = "") -> int:
         return 0
     headers = {
         "Authorization": f"Bearer {NOTION_API_KEY}",
-        "Notion-Version": "2025-09-03",
+        "Notion-Version": "2022-06-28",
         "Content-Type": "application/json",
     }
     data = {"page_size": 100}
