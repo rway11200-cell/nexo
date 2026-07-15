@@ -11,6 +11,7 @@ app = Flask(__name__)
 NOTION_API_KEY = os.environ.get("NOTION_API_TOKEN", "")
 MOVIMIENTOS_DB = os.environ.get("MOVIMIENTOS_DB", "")
 PERIODO_DB = "39d06589-4ee5-8036-a3ef-c73eadeae4f8"
+DEBUG = os.environ.get("DEBUG", "false").lower() == "true"
 
 CATEGORY_KEYWORDS = {
     "comida": ["restaurant", "starbucks", "café", "sushi", "pizza", "delivery", "pedidos", "super", "tottus", "lider", "jumbo", "mercado"],
@@ -300,6 +301,8 @@ def test_telegram():
 def tasker_webhook():
     """Generic endpoint — auto-detect CMR or Scotia."""
     text = request.args.get("text", "")
+    if DEBUG:
+        app.logger.info(f"DEBUG /tasker text={text[:300]}")
     if not text:
         return jsonify({"ok": False, "reason": "no text"}), 200
 
