@@ -303,6 +303,7 @@ def tasker_webhook():
     text = request.args.get("text", "")
     if DEBUG:
         app.logger.info(f"DEBUG /tasker text={text[:300]}")
+        print(f"DEBUG /tasker text={text[:300]}", flush=True)
     if not text:
         return jsonify({"ok": False, "reason": "no text"}), 200
 
