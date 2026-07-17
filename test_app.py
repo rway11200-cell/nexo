@@ -1,4 +1,6 @@
 from app.main import app
+from app.notion import routes as notion_routes
+from app.notion import service as notion_service
 from app.tasker import service
 from fastapi.testclient import TestClient
 
@@ -19,7 +21,9 @@ def test_root():
     assert data["service"] == "budget-webhook"
 
 
-def test_status():
+def test_status(monkeypatch):
+    monkeypatch.setattr(service.repository, "get_active_period", lambda: None)
+    monkeypatch.setattr(service.repository, "get_monthly_spent", lambda _: 0)
     resp = client.get("/status")
     assert resp.status_code == 200
     data = resp.json()
@@ -27,7 +31,9 @@ def test_status():
         assert key in data
 
 
-def test_status_text():
+def test_status_text(monkeypatch):
+    monkeypatch.setattr(service.repository, "get_active_period", lambda: None)
+    monkeypatch.setattr(service.repository, "get_monthly_spent", lambda _: 0)
     resp = client.get("/status/text")
     assert resp.status_code == 200
     assert resp.headers["content-type"].startswith("text/plain")
@@ -39,7 +45,11 @@ def test_tasker_no_text():
     assert resp.json() == {"ok": False, "reason": "no text"}
 
 
-def test_tasker_cmr():
+def test_tasker_cmr(monkeypatch):
+    monkeypatch.setattr(service.repository, "get_active_period", lambda: None)
+    monkeypatch.setattr(service.repository, "register_notion", lambda *args: True)
+    monkeypatch.setattr(service.repository, "get_monthly_spent", lambda _: 1500)
+    monkeypatch.setattr(service.repository, "send_telegram", lambda _: None)
     text = "Compraste $1.500 en Starbucks SANTIAGO/CHL Con tu CMR"
     resp = client.get(f"/tasker?text={text}")
     assert resp.status_code == 200
@@ -106,8 +116,108 @@ def test_openapi_spec():
     assert "/health" in spec["paths"]
 
 
-def test_get_budget_summary():
+def test_get_budget_summary(monkeypatch):
+    monkeypatch.setattr(service.repository, "get_monthly_spent", lambda _: 0)
     summary = service.get_budget_summary(budget=1000000)
     assert summary["budget"] == 1000000
     assert summary["remaining"] == 1000000 - summary["spent"]
     assert "advice" in summary
+
+
+def test_notion_requires_admin_key(monkeypatch):
+    monkeypatch.setattr(notion_routes, "NOTION_ADMIN_API_KEY", "admin-secret")
+    resp = client.get("/notion/databases/db-id/schema")
+    assert resp.status_code == 401
+
+
+def test_notion_database_schema(monkeypatch):
+    monkeypatch.setattr(notion_routes, "NOTION_ADMIN_API_KEY", "admin-secret")
+    monkeypatch.setattr(
+        notion_service.repository,
+        "get_database",
+        lambda _: {
+            "id": "db-id",
+            "title": [{"plain_text": "Planeación 2026"}],
+            "url": "https://notion.so/db-id",
+            "properties": {
+                "Nombre": {"id": "title", "type": "title", "title": {}},
+                "Estado": {
+                    "id": "status",
+                    "type": "status",
+                    "status": {"options": [{"name": "Pendiente", "color": "gray"}]},
+                },
+            },
+        },
+    )
+
+    resp = client.get(
+        "/notion/databases/db-id/schema",
+        headers={"X-API-Key": "admin-secret"},
+    )
+
+    assert resp.status_code == 200
+    assert resp.json()["title"] == "Planeación 2026"
+    assert [item["name"] for item in resp.json()["properties"]] == ["Estado", "Nombre"]
+
+
+def test_notion_search_databases(monkeypatch):
+    monkeypatch.setattr(notion_routes, "NOTION_ADMIN_API_KEY", "admin-secret")
+    monkeypatch.setattr(
+        notion_service.repository,
+        "search_databases",
+        lambda query, cursor: {
+            "results": [
+                {
+                    "id": "db-id",
+                    "title": [{"plain_text": "Planeación 2026"}],
+                    "url": "https://notion.so/db-id",
+                }
+            ],
+            "has_more": False,
+            "next_cursor": None,
+        },
+    )
+
+    resp = client.get(
+        "/notion/databases?query=Planeación%202026",
+        headers={"X-API-Key": "admin-secret"},
+    )
+
+    assert resp.status_code == 200
+    assert resp.json()["databases"][0]["title"] == "Planeación 2026"
+
+
+def test_notion_crud_endpoints(monkeypatch):
+    monkeypatch.setattr(notion_routes, "NOTION_ADMIN_API_KEY", "admin-secret")
+    headers = {"X-API-Key": "admin-secret"}
+    page = {"id": "page-id", "properties": {}}
+
+    monkeypatch.setattr(notion_service.repository, "query_database", lambda db, data: {"results": [page]})
+    monkeypatch.setattr(notion_service.repository, "create_page", lambda db, data: page)
+    monkeypatch.setattr(notion_service.repository, "get_page", lambda page_id: page)
+    monkeypatch.setattr(notion_service.repository, "update_page", lambda page_id, data: page)
+    monkeypatch.setattr(
+        notion_service.repository,
+        "archive_page",
+        lambda page_id: {"id": page_id, "archived": True},
+    )
+
+    query = client.post("/notion/databases/db-id/query", headers=headers, json={})
+    created = client.post(
+        "/notion/databases/db-id/pages",
+        headers=headers,
+        json={"properties": {"Nombre": {"title": []}}},
+    )
+    read = client.get("/notion/pages/page-id", headers=headers)
+    updated = client.patch(
+        "/notion/pages/page-id",
+        headers=headers,
+        json={"properties": {"Estado": {"status": {"name": "Listo"}}}},
+    )
+    deleted = client.delete("/notion/pages/page-id", headers=headers)
+
+    assert query.status_code == 200
+    assert created.status_code == 201
+    assert read.status_code == 200
+    assert updated.status_code == 200
+    assert deleted.json() == {"id": "page-id", "archived": True}

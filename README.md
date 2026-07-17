@@ -30,6 +30,11 @@ app/
 ├── health/
 │   ├── __init__.py
 │   └── routes.py        # GET /health
+├── notion/              # Generic, protected Notion CRUD
+│   ├── routes.py
+│   ├── schemas.py
+│   ├── service.py
+│   └── repository.py
 └── tasker/
     ├── __init__.py
     ├── routes.py        # HTTP endpoints
@@ -91,8 +96,23 @@ curl "http://localhost:8000/tasker?text=Compraste%20%241.500%20en%20Starbucks%20
 | Variable | Description |
 |---|---|
 | `NOTION_API_TOKEN` | Notion integration token |
+| `NOTION_ADMIN_API_KEY` | Secret required in `X-API-Key` for CRUD endpoints |
 | `MOVIMIENTOS_DB` | Notion database ID for expenses |
 | `PERIODO_DB` | Notion database ID for periods |
 | `TELEGRAM_BOT_TOKEN` | Telegram bot token |
 | `TELEGRAM_GROUP_ID` | Telegram group chat ID |
 | `DEBUG` | Enable debug logging |
+
+## Generic Notion CRUD
+
+The protected `/notion` endpoints let an AI discover database schemas and administer pages without exposing the Notion integration token.
+
+```bash
+curl "http://localhost:8000/notion/databases?query=Planeación%202026" \
+  -H "X-API-Key: $NOTION_ADMIN_API_KEY"
+
+curl "http://localhost:8000/notion/databases/<database_id>/schema" \
+  -H "X-API-Key: $NOTION_ADMIN_API_KEY"
+```
+
+See [Notion CRUD](docs/notion-crud.md) for query, create, update, and archive examples.

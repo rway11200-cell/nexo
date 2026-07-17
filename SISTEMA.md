@@ -31,6 +31,11 @@ Tasker (Android) → HTTP GET → Railway (budget-webhook) → Notion DB Movimie
 | `/tasker/cmr` | GET | Solo compras CMR (Banco Falabella) |
 | `/tasker/scotiabank` | GET | Solo pagos Scotia |
 | `/test-telegram` | GET | Envía mensaje de test al grupo |
+| `/notion/databases` | GET | Busca bases compartidas con la integración |
+| `/notion/databases/{id}/schema` | GET | Descubre propiedades y tipos de una base |
+| `/notion/databases/{id}/query` | POST | Consulta páginas de una base |
+| `/notion/databases/{id}/pages` | POST | Crea una página |
+| `/notion/pages/{id}` | GET/PATCH/DELETE | Lee, actualiza o archiva una página |
 
 Todos los endpoints Tasker reciben `?text=...` con el texto de la notificación bancaria.
 
@@ -47,6 +52,7 @@ Todos los endpoints Tasker reciben `?text=...` con el texto de la notificación 
 | Variable | Valor | Descripción |
 |---|---|---|
 | `NOTION_API_TOKEN` | `ntn_F17034...` | Token integración "Hermes" (workspace Seba Personal) |
+| `NOTION_ADMIN_API_KEY` | Secreto aleatorio | Protege los endpoints genéricos `/notion` |
 | `MOVIMIENTOS_DB` | `2d806589-4ee5-809d-920f-e252d20d3d8c` | Database ID de "Movimientos" |
 | `TELEGRAM_BOT_TOKEN` | `8721430395:...` | Token de Fosforito |
 | `TELEGRAM_GROUP_ID` | `-1004337757506` | Chat ID del grupo "Presupuesto CorJar" |

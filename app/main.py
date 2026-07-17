@@ -3,6 +3,7 @@ import os
 from fastapi import FastAPI
 
 from app.health.routes import router as health_router
+from app.notion.routes import router as notion_router
 from app.tasker.routes import router as tasker_router
 
 app = FastAPI(
@@ -18,6 +19,7 @@ app = FastAPI(
 
 app.include_router(health_router)
 app.include_router(tasker_router)
+app.include_router(notion_router)
 
 
 @app.get("/", tags=["Health"])
