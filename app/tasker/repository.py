@@ -40,28 +40,18 @@ def get_active_period() -> tuple[int, str] | None:
 
 
 def register_notion(
-    amount: int,
-    merchant: str,
-    category: str,
-    source: str = "CMR",
-    period_page_id: str = "",
-    fecha: str = "",
-    origen: str = "",
-    tarjeta: str = "N/A",
+    amount: int, merchant: str, category: str, source: str = "CMR", period_page_id: str = ""
 ) -> bool:
     if not NOTION_API_TOKEN:
         return False
-    date_str = fecha if fecha else datetime.now().strftime("%Y-%m-%d")
+    today = datetime.now().strftime("%Y-%m-%d")
     merchant_display = f"{merchant} [{source}]"[:60]
     props = {
         "Nombre": {"title": [{"text": {"content": merchant_display}}]},
         "Monto": {"number": amount},
-        "Fecha": {"date": {"start": date_str}},
+        "Fecha": {"date": {"start": today}},
         "Categoría": {"select": {"name": category}},
-        "Tarjeta": {"select": {"name": tarjeta}},
     }
-    if origen:
-        props["Origen"] = {"select": {"name": origen}}
     if period_page_id:
         props["Periodo"] = {"relation": [{"id": period_page_id}]}
     data = {"parent": {"database_id": MOVIMIENTOS_DB}, "properties": props}

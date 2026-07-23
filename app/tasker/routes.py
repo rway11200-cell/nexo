@@ -1,8 +1,7 @@
 import sys
-from datetime import datetime
 
 import requests
-from fastapi import APIRouter, Body, Query
+from fastapi import APIRouter, Query
 from fastapi.responses import JSONResponse, PlainTextResponse
 
 from app.config import DEBUG, TELEGRAM_BOT_TOKEN, TELEGRAM_GROUP_ID
@@ -26,57 +25,6 @@ def budget_status_text():
     budget_val = active[0] if active else 1_000_000
     summary = service.get_budget_summary(period_page_id, budget_val)
     return service.format_budget_summary(summary)
-
-
-@router.post("/gasto")
-def add_manual_expense(
-    nombre: str = Body(..., description="Descripción del gasto"),
-    monto: int = Body(..., description="Monto en pesos chilenos"),
-    categoria: str = Body("otro", description="Categoría: comida, super, salud, etc."),
-    fecha: str = Body("", description="Fecha YYYY-MM-DD (opcional, default: hoy)"),
-    telegram: bool = Body(False, description="Notificar por Telegram"),
-):
-    """Registra un gasto manual simple. Completa automáticamente:
-    - Fecha = hoy (si no se especifica)
-    - Origen = ingresoManual
-    - Tarjeta = N/A
-    - Periodo = periodo activo del mes
-
-    Ejemplo:
-        POST /gasto
-        {"nombre": "Paltas", "monto": 5000, "categoria": "super"}
-    """
-    if not nombre or not isinstance(nombre, str):
-        return JSONResponse(
-            {"ok": False, "error": "nombre es requerido (string)"}, status_code=400
-        )
-    if not monto or monto <= 0:
-        return JSONResponse(
-            {"ok": False, "error": "monto debe ser un número positivo"}, status_code=400
-        )
-
-    summary = service.process_manual_expense(
-        nombre=nombre.strip(),
-        monto=monto,
-        categoria=categoria,
-        fecha=fecha,
-        enviar_telegram=telegram,
-    )
-
-    text = service.format_budget_summary(summary, nombre, monto, categoria, "Manual")
-
-    return {
-        "ok": True,
-        "gasto": {
-            "nombre": nombre.strip(),
-            "monto": monto,
-            "categoria": categoria,
-            "fecha": fecha or datetime.now().strftime("%Y-%m-%d"),
-            "origen": "ingresoManual",
-        },
-        "presupuesto": summary,
-        "texto": text,
-    }
 
 
 @router.get("/test-telegram")

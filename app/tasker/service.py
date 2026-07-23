@@ -19,7 +19,7 @@ CATEGORY_KEYWORDS = {
 
 
 def clean_text(text: str) -> str:
-    return re.sub(r"%20|%evtprm\\d|%NTITLE|%NTEXT|cl\\.android", "", text).strip()
+    return re.sub(r"%20|%evtprm\d|%NTITLE|%NTEXT|cl\.android", "", text).strip()
 
 
 def infer_category(comercio: str) -> str:
@@ -34,8 +34,8 @@ def infer_category(comercio: str) -> str:
 def parse_cmr(text: str) -> dict | None:
     clean = clean_text(text)
     patterns = [
-        r"Compraste\\s+\\$?([\\d.]+)\\s+en\\s+(.+?)(?:\\s+(?:SANTIAGO|CHL|Las Condes|Con tu))",
-        r"Compraste\\s+\\$?([\\d.]+)\\s+en\\s+(.+?)(?:\\s+Con tu)",
+        r"Compraste\s+\$?([\d.]+)\s+en\s+(.+?)(?:\s+(?:SANTIAGO|CHL|Las Condes|Con tu))",
+        r"Compraste\s+\$?([\d.]+)\s+en\s+(.+?)(?:\s+Con tu)",
     ]
     for p in patterns:
         m = re.search(p, clean, re.IGNORECASE)
@@ -53,7 +53,7 @@ def parse_cmr(text: str) -> dict | None:
 
 def parse_scotiabank(text: str) -> dict | None:
     clean = clean_text(text)
-    pattern = r"pago[^$]*\\$?([\\d.]+)\\s+en\\s+(.+?)(?:\\.|$|Si\\s+desconoces)"
+    pattern = r"pago[^$]*\$?([\d.]+)\s+en\s+(.+?)(?:\.|$|Si\s+desconoces)"
     m = re.search(pattern, clean, re.IGNORECASE)
     if m:
         try:
@@ -114,7 +114,7 @@ def format_budget_summary(
     if merchant:
         lines.append(f"✅ **${amount:,}** registrado en *{merchant}* ({source})")
         lines.append(f"📂 Categoría: {category}")
-        lines.append("")
+    lines.append("")
     lines.append(f"📊 Día {s['day']} de {s['days_total']} ({s['month_pct']}% del mes)")
     lines.append(
         f"💰 Gastado: **${s['spent']:,}** ({s['spent_pct']}% del presupuesto)"
@@ -129,7 +129,7 @@ def format_budget_summary(
     else:
         lines.append(f"🎯 Ritmo: {s['pace']}% ✅")
     lines.append(f"💬 {s['advice']}")
-    return "\\n".join(lines)
+    return "\n".join(lines)
 
 
 def process_and_respond(amount: int, merchant: str, category: str, source: str) -> dict:
@@ -143,56 +143,5 @@ def process_and_respond(amount: int, merchant: str, category: str, source: str) 
 
     msg = format_budget_summary(summary, merchant, amount, category, source)
     repository.send_telegram(msg)
-
-    return summary
-
-
-def process_manual_expense(
-    nombre: str,
-    monto: int,
-    categoria: str = "otro",
-    fecha: str = "",
-    enviar_telegram: bool = False,
-) -> dict:
-    """Registra un gasto manual en Notion y retorna el resumen del presupuesto.
-
-    Args:
-        nombre: Descripción del gasto (ej: 'Paltas', 'Apple')
-        monto: Monto en pesos chilenos
-        categoria: Categoría del gasto (default: 'otro')
-        fecha: Fecha en formato YYYY-MM-DD (default: hoy)
-        enviar_telegram: Si es True, envía notificación al grupo de Telegram
-
-    Returns:
-        Dict con el resumen del presupuesto actualizado
-    """
-    VALID_CATEGORIES = {
-        "comida", "salud", "transporte", "auto", "perritos",
-        "vestuario", "super", "suscripciones", "otro",
-        "entretencion", "willy", "especial",
-    }
-    if categoria not in VALID_CATEGORIES:
-        categoria = "otro"
-
-    active = repository.get_active_period()
-    period_page_id = active[1] if active else ""
-    budget_val = active[0] if active else 1_000_000
-
-    repository.register_notion(
-        amount=monto,
-        merchant=nombre,
-        category=categoria,
-        source="Manual",
-        period_page_id=period_page_id,
-        fecha=fecha,
-        origen="ingresoManual",
-        tarjeta="N/A",
-    )
-
-    summary = get_budget_summary(period_page_id, budget_val)
-
-    if enviar_telegram:
-        msg = format_budget_summary(summary, nombre, monto, categoria, "Manual")
-        repository.send_telegram(msg)
 
     return summary
