@@ -7,4 +7,4 @@
 - Rama de integración local: `hermes/opencode-nexo`.
 - Suite validada con entorno uv aislado: 30 tests pasaron.
 - No se ejecutaron llamadas reales a Notion, Telegram o Railway durante los tests.
-- Próximo paso opcional: revisar el diff y autorizar push de la rama o integración a `main`.
+- Próximo paso: revisar el Pull Request de `hermes/opencode-nexo` e integrar a `main` cuando corresponda.

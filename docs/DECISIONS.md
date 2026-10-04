@@ -8,4 +8,4 @@
 - OpenCode puede editar y ejecutar tests; Hermes conserva el control de ramas, commits, push y Railway.
 - La rama local de integración es `hermes/opencode-nexo`.
 - Los cambios remotos y locales se integraron sin conflictos.
-- El push de la rama queda pendiente de autorización explícita.
+- La rama `hermes/opencode-nexo` fue publicada en GitHub para revisión.
