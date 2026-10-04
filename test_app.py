@@ -126,6 +126,34 @@ def test_get_budget_summary(monkeypatch):
     assert summary["budget"] == 1000000
     assert summary["remaining"] == 1000000 - summary["spent"]
     assert "advice" in summary
+    for key in ("days_remaining", "daily_available", "daily_average", "projected_total", "status"):
+        assert key in summary
+
+
+def test_short_budget_message_uses_operational_metrics():
+    summary = {
+        "spent": 211265,
+        "remaining": 788735,
+        "budget": 1000000,
+        "day": 4,
+        "days_total": 31,
+        "month_pct": 13,
+        "spent_pct": 21,
+        "pace": 162,
+        "advice": "⚠️ Vas más gastado de lo que deberías al día de hoy",
+        "days_remaining": 27,
+        "daily_available": 29212,
+        "daily_average": 52816,
+        "projected_total": 1637304,
+        "status": "🔴 Ritmo alto",
+    }
+    message = service.format_budget_summary(summary, "Supermercado", 25000, "comida", "CMR")
+    assert "🧾 **$25,000** en *Supermercado*" in message
+    assert "💰 Restan **$788,735**" in message
+    assert "💵 Disponible promedio: **$29,212/día**" in message
+    assert "📈 Proyección: **$1,637,304**" in message
+    assert "🔴 Ritmo alto" in message
+    assert "Gastado:" not in message
 
 
 def test_notion_requires_admin_key(monkeypatch):

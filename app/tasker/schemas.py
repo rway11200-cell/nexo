@@ -11,6 +11,11 @@ class BudgetSummary(BaseModel):
     spent_pct: int = Field(examples=[15])
     pace: int = Field(examples=[31])
     advice: str = Field(examples=["🟢 Vas bien! Estás gastando menos de lo esperado"])
+    days_remaining: int = Field(examples=[16])
+    daily_available: int = Field(examples=[53125])
+    daily_average: int = Field(examples=[10000])
+    projected_total: int = Field(examples=[310000])
+    status: str = Field(examples=["🟢 Ritmo controlado"])
 
     model_config = {
         "json_schema_extra": {
@@ -23,6 +28,11 @@ class BudgetSummary(BaseModel):
                 "month_pct": 48,
                 "spent_pct": 15,
                 "pace": 31,
+                "days_remaining": 16,
+                "daily_available": 53125,
+                "daily_average": 10000,
+                "projected_total": 310000,
+                "status": "🟢 Ritmo controlado",
                 "advice": "🟢 Vas bien! Estás gastando menos de lo esperado",
             }
         }

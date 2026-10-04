@@ -78,6 +78,12 @@ def get_budget_summary(period_page_id: str = "", budget: int = 1_000_000) -> dic
     month_pct = round(day_of_month / days_in_month * 100)
     spent_pct = round(spent / budget * 100) if budget > 0 else 0
     pace = round(spent_pct / month_pct * 100) if month_pct > 0 else 0
+    days_remaining = max(days_in_month - day_of_month, 0)
+    daily_available = (
+        round(remaining / days_remaining) if days_remaining > 0 else remaining
+    )
+    daily_average = round(spent / day_of_month) if day_of_month > 0 else 0
+    projected_total = round(daily_average * days_in_month)
 
     if remaining < 0:
         advice = "🔴 ¡Te pasaste del presupuesto!"
@@ -90,6 +96,13 @@ def get_budget_summary(period_page_id: str = "", budget: int = 1_000_000) -> dic
     else:
         advice = "✅ Vas al día con el presupuesto"
 
+    if projected_total > budget * 1.10:
+        status = "🔴 Ritmo alto"
+    elif projected_total > budget:
+        status = "🟡 Ritmo elevado"
+    else:
+        status = "🟢 Ritmo controlado"
+
     return {
         "spent": spent,
         "remaining": remaining,
@@ -100,6 +113,11 @@ def get_budget_summary(period_page_id: str = "", budget: int = 1_000_000) -> dic
         "spent_pct": spent_pct,
         "pace": pace,
         "advice": advice,
+        "days_remaining": days_remaining,
+        "daily_available": daily_available,
+        "daily_average": daily_average,
+        "projected_total": projected_total,
+        "status": status,
     }
 
 
@@ -112,23 +130,11 @@ def format_budget_summary(
 ):
     lines = []
     if merchant:
-        lines.append(f"✅ **${amount:,}** registrado en *{merchant}* ({source})")
-        lines.append(f"📂 Categoría: {category}")
-    lines.append("")
-    lines.append(f"📊 Día {s['day']} de {s['days_total']} ({s['month_pct']}% del mes)")
-    lines.append(
-        f"💰 Gastado: **${s['spent']:,}** ({s['spent_pct']}% del presupuesto)"
-    )
-    lines.append(
-        f"💵 Restante: **${s['remaining']:,}** de ${s['budget']:,}"
-    )
-    if s["pace"] > 120:
-        lines.append(f"⚡ Ritmo: {s['pace']}% 🔴 (gastando más rápido de lo esperado)")
-    elif s["pace"] < 80:
-        lines.append(f"🐢 Ritmo: {s['pace']}% 🟢 (gastando más lento)")
-    else:
-        lines.append(f"🎯 Ritmo: {s['pace']}% ✅")
-    lines.append(f"💬 {s['advice']}")
+        lines.append(f"🧾 **${amount:,}** en *{merchant}*")
+    lines.append(f"💰 Restan **${s['remaining']:,}**")
+    lines.append(f"💵 Disponible promedio: **${s['daily_available']:,}/día**")
+    lines.append(f"📈 Proyección: **${s['projected_total']:,}**")
+    lines.append(s["status"])
     return "\n".join(lines)
 
 
