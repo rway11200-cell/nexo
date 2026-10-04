@@ -27,6 +27,7 @@ Tasker (Android) → HTTP GET → Railway (budget-webhook) → Notion DB Movimie
 | `/health` | GET | Health check: `{"status": "ok"}` |
 | `/status` | GET | Resumen de presupuesto en JSON |
 | `/status/text` | GET | Resumen corto: saldo, disponible diario, proyección y semáforo |
+| `/budget/rollover` | POST | Cierra el periodo anterior y activa/crea el periodo del mes objetivo (requiere `X-API-Key`) |
 | `/tasker` | GET | Detecta automáticamente CMR o Scotia |
 | `/tasker/cmr` | GET | Solo compras CMR (Banco Falabella) |
 | `/tasker/scotiabank` | GET | Solo pagos Scotia |

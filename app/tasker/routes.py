@@ -1,13 +1,36 @@
+import secrets
 import sys
 
 import requests
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Header, HTTPException, Query
 from fastapi.responses import JSONResponse, PlainTextResponse
 
-from app.config import DEBUG, TELEGRAM_BOT_TOKEN, TELEGRAM_GROUP_ID
+from app.config import DEBUG, NOTION_ADMIN_API_KEY, TELEGRAM_BOT_TOKEN, TELEGRAM_GROUP_ID
 from app.tasker import service
 
 router = APIRouter(tags=["Tasker"])
+
+
+@router.post("/budget/rollover")
+def budget_rollover(
+    x_api_key: str | None = Header(default=None, alias="X-API-Key"),
+    target_date: str | None = Query(default=None),
+):
+    if not NOTION_ADMIN_API_KEY:
+        raise HTTPException(status_code=503, detail="NOTION_ADMIN_API_KEY is not configured")
+    if not x_api_key or not secrets.compare_digest(x_api_key, NOTION_ADMIN_API_KEY):
+        raise HTTPException(status_code=401, detail="Invalid or missing X-API-Key")
+    parsed_date = None
+    if target_date:
+        try:
+            from datetime import date
+            parsed_date = date.fromisoformat(target_date)
+        except ValueError as error:
+            raise HTTPException(status_code=400, detail="target_date must be YYYY-MM-DD") from error
+    try:
+        return service.rollover_period(parsed_date)
+    except RuntimeError as error:
+        raise HTTPException(status_code=502, detail=str(error)) from error
 
 
 @router.get("/status")

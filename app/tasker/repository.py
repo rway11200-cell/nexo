@@ -39,6 +39,56 @@ def get_active_period() -> tuple[int, str] | None:
     return None
 
 
+def get_period_by_name(name: str) -> dict | None:
+    """Return the first Periodo page whose title (Nombre) matches name."""
+    if not NOTION_API_TOKEN:
+        return None
+    payload = {
+        "filter": {"property": "Nombre", "title": {"equals": name}},
+        "page_size": 1,
+    }
+    resp = requests.post(
+        f"https://api.notion.com/v1/databases/{PERIODO_DB}/query",
+        headers=_NOTION_HEADERS,
+        json=payload,
+    )
+    if resp.status_code != 200:
+        return None
+    return next(iter(resp.json().get("results", [])), None)
+
+
+def update_period_active(page_id: str, active: bool) -> bool:
+    if not NOTION_API_TOKEN:
+        return False
+    resp = requests.patch(
+        f"https://api.notion.com/v1/pages/{page_id}",
+        headers=_NOTION_HEADERS,
+        json={"properties": {"Activo": {"checkbox": active}}},
+    )
+    return resp.status_code == 200
+
+
+def create_period(name: str, budget: int, active: bool = False) -> dict | None:
+    if not NOTION_API_TOKEN:
+        return None
+    payload = {
+        "parent": {"database_id": PERIODO_DB},
+        "properties": {
+            "Nombre": {"title": [{"text": {"content": name}}]},
+            "Presupuesto": {"number": budget},
+            "Activo": {"checkbox": active},
+        },
+    }
+    resp = requests.post(
+        "https://api.notion.com/v1/pages",
+        headers=_NOTION_HEADERS,
+        json=payload,
+    )
+    if resp.status_code != 200:
+        return None
+    return resp.json()
+
+
 def register_notion(
     amount: int, merchant: str, category: str, source: str = "CMR", period_page_id: str = ""
 ) -> bool:

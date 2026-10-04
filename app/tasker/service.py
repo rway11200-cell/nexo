@@ -1,10 +1,12 @@
 import re
-from datetime import datetime
+from datetime import date, datetime
+from zoneinfo import ZoneInfo
 
 from app.config import DEBUG
 from app.tasker import repository
 
 CATEGORY_KEYWORDS = {
+
     "comida": [
         "restaurant", "starbucks", "café", "sushi", "pizza", "delivery",
         "pedidos", "super", "tottus", "lider", "jumbo", "mercado",
@@ -65,6 +67,53 @@ def parse_scotiabank(text: str) -> dict | None:
         except ValueError:
             return None
     return None
+
+
+def rollover_period(target_date: date | None = None) -> dict:
+    """Close the current Periodo and idempotently activate the target month."""
+    now = target_date or datetime.now(ZoneInfo("America/Santiago")).date()
+    months = (
+        "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+        "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
+    )
+    target_name = f"{months[now.month - 1]} {now.year}"
+    active = repository.get_active_period()
+    existing = repository.get_period_by_name(target_name)
+
+    if existing:
+        target_id = existing.get("id", "")
+        if active and active[1] != target_id:
+            if not repository.update_period_active(active[1], False):
+                raise RuntimeError("No se pudo cerrar el periodo activo anterior")
+        if not repository.update_period_active(target_id, True):
+            raise RuntimeError("No se pudo activar el periodo objetivo")
+        budget = active[0] if active else 1_000_000
+        return {
+            "ok": True,
+            "created": False,
+            "period_name": target_name,
+            "period_id": target_id,
+            "budget": budget,
+            "previous_period_id": active[1] if active and active[1] != target_id else None,
+        }
+
+    budget = active[0] if active else 1_000_000
+    created = repository.create_period(target_name, budget, active=False)
+    if not created:
+        raise RuntimeError("No se pudo crear el periodo objetivo")
+    target_id = created.get("id", "")
+    if active and not repository.update_period_active(active[1], False):
+        raise RuntimeError("El nuevo periodo fue creado, pero no se pudo cerrar el anterior")
+    if not repository.update_period_active(target_id, True):
+        raise RuntimeError("El periodo fue creado, pero no se pudo activar")
+    return {
+        "ok": True,
+        "created": True,
+        "period_name": target_name,
+        "period_id": target_id,
+        "budget": budget,
+        "previous_period_id": active[1] if active else None,
+    }
 
 
 def get_budget_summary(period_page_id: str = "", budget: int = 1_000_000) -> dict:
