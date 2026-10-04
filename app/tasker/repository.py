@@ -40,11 +40,11 @@ def get_active_period() -> tuple[int, str] | None:
 
 
 def get_period_by_name(name: str) -> dict | None:
-    """Return the first Periodo page whose title (Nombre) matches name."""
+    """Return the first Periodo page whose title (Name) matches name."""
     if not NOTION_API_TOKEN:
         return None
     payload = {
-        "filter": {"property": "Nombre", "title": {"equals": name}},
+        "filter": {"property": "Name", "title": {"equals": name}},
         "page_size": 1,
     }
     resp = requests.post(
@@ -74,7 +74,7 @@ def create_period(name: str, budget: int, active: bool = False) -> dict | None:
     payload = {
         "parent": {"database_id": PERIODO_DB},
         "properties": {
-            "Nombre": {"title": [{"text": {"content": name}}]},
+            "Name": {"title": [{"text": {"content": name}}]},
             "Presupuesto": {"number": budget},
             "Activo": {"checkbox": active},
         },

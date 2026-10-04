@@ -94,6 +94,7 @@ La DB "Movimientos" recibe:
 
 El webhook lee el presupuesto desde la DB **"Periodo"** en Notion:
 - Busca la página con `Activo = true` (ej: "Julio 2026")
+- El título del periodo está en la propiedad `Name`
 - Lee el campo `Presupuesto` (número)
 - Calcula: `Presupuesto - SUM(Monto de gastos con Periodo relation)`
 - Responde en Telegram con el saldo disponible
