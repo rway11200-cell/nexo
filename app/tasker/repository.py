@@ -17,26 +17,37 @@ _NOTION_HEADERS = {
 }
 
 
-def get_active_period() -> tuple[int, str] | None:
+def get_active_periods() -> list[tuple[int, str, str]]:
+    """Return every Periodo page marked as active: (budget, page_id, name)."""
     if not NOTION_API_TOKEN:
-        return None
-    data = {"filter": {"property": "Activo", "checkbox": {"equals": True}}, "page_size": 1}
+        return []
+    data = {"filter": {"property": "Activo", "checkbox": {"equals": True}}, "page_size": 100}
     resp = requests.post(
         f"https://api.notion.com/v1/databases/{PERIODO_DB}/query",
         headers=_NOTION_HEADERS,
         json=data,
     )
     if resp.status_code != 200:
-        return None
+        return []
+    periods = []
     for result in resp.json().get("results", []):
         page_id = result.get("id", "")
         props = result.get("properties", {})
-        budget = 1_000_000
-        for v in props.values():
-            if v.get("type") == "number":
-                budget = v.get("number", 1_000_000)
-        return (budget, page_id)
-    return None
+        budget = props.get("Presupuesto", {}).get("number")
+        if budget is None:
+            continue
+        title = props.get("Name", {}).get("title", [])
+        name = title[0].get("plain_text", "") if title else ""
+        periods.append((int(budget), page_id, name))
+    return periods
+
+
+def get_active_period() -> tuple[int, str] | None:
+    periods = get_active_periods()
+    if len(periods) != 1:
+        return None
+    budget, page_id, _ = periods[0]
+    return (budget, page_id)
 
 
 def get_period_by_name(name: str) -> dict | None:

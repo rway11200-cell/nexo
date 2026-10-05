@@ -1,5 +1,7 @@
 from datetime import date
 
+import pytest
+
 from app.main import app
 from app.coding_loop import repository as coding_loop_repository
 from app.coding_loop import service as coding_loop_service
@@ -7,6 +9,7 @@ from app.notion import routes as notion_routes
 from app.notion import service as notion_service
 from app.planning import repository as planning_repository
 from app.planning import service as planning_service
+from app.tasker import routes as tasker_routes
 from app.tasker import service
 from fastapi.testclient import TestClient
 
@@ -160,7 +163,9 @@ def test_short_budget_message_uses_operational_metrics():
 
 def test_rollover_creates_and_activates_target(monkeypatch):
     calls = []
-    monkeypatch.setattr(service.repository, "get_active_period", lambda: (1000000, "old"))
+    monkeypatch.setattr(
+        service.repository, "get_active_periods", lambda: [(1000000, "old", "Septiembre 2026")]
+    )
     monkeypatch.setattr(service.repository, "get_period_by_name", lambda _: None)
     monkeypatch.setattr(
         service.repository,
@@ -175,12 +180,15 @@ def test_rollover_creates_and_activates_target(monkeypatch):
     result = service.rollover_period(date(2026, 10, 1))
     assert result["period_name"] == "Octubre 2026"
     assert result["created"] is True
+    assert result["budget"] == 1000000
     assert calls == [("old", False), ("new", True)]
 
 
 def test_rollover_is_idempotent_for_existing_target(monkeypatch):
     calls = []
-    monkeypatch.setattr(service.repository, "get_active_period", lambda: (1000000, "old"))
+    monkeypatch.setattr(
+        service.repository, "get_active_periods", lambda: [(1000000, "old", "Septiembre 2026")]
+    )
     monkeypatch.setattr(service.repository, "get_period_by_name", lambda _: {"id": "new"})
     monkeypatch.setattr(
         service.repository,
@@ -191,6 +199,100 @@ def test_rollover_is_idempotent_for_existing_target(monkeypatch):
     assert result["created"] is False
     assert result["period_id"] == "new"
     assert calls == [("old", False), ("new", True)]
+
+
+def test_rollover_rejects_multiple_active_periods(monkeypatch):
+    monkeypatch.setattr(
+        service.repository,
+        "get_active_periods",
+        lambda: [(1000000, "a", "Septiembre 2026"), (1000000, "b", "Octubre 2026")],
+    )
+    with pytest.raises(service.RolloverIntegrityError):
+        service.rollover_period(date(2026, 10, 1))
+
+
+def test_rollover_rejects_missing_active_period(monkeypatch):
+    monkeypatch.setattr(service.repository, "get_active_periods", lambda: [])
+    with pytest.raises(service.RolloverIntegrityError):
+        service.rollover_period(date(2026, 10, 1))
+
+
+def test_rollover_endpoint_requires_key(monkeypatch):
+    monkeypatch.setattr(tasker_routes, "NOTION_ADMIN_API_KEY", "admin-secret")
+    resp = client.post("/budget/rollover")
+    assert resp.status_code == 401
+
+
+def test_rollover_endpoint_rejects_wrong_key(monkeypatch):
+    monkeypatch.setattr(tasker_routes, "NOTION_ADMIN_API_KEY", "admin-secret")
+    resp = client.post("/budget/rollover", headers={"X-API-Key": "nope"})
+    assert resp.status_code == 401
+
+
+def test_rollover_endpoint_unconfigured_key(monkeypatch):
+    monkeypatch.setattr(tasker_routes, "NOTION_ADMIN_API_KEY", "")
+    resp = client.post("/budget/rollover", headers={"X-API-Key": "admin-secret"})
+    assert resp.status_code == 503
+
+
+def test_rollover_endpoint_rejects_bad_date(monkeypatch):
+    monkeypatch.setattr(tasker_routes, "NOTION_ADMIN_API_KEY", "admin-secret")
+    resp = client.post(
+        "/budget/rollover?target_date=2026-13-99",
+        headers={"X-API-Key": "admin-secret"},
+    )
+    assert resp.status_code == 400
+
+
+def test_rollover_endpoint_success(monkeypatch):
+    monkeypatch.setattr(tasker_routes, "NOTION_ADMIN_API_KEY", "admin-secret")
+    monkeypatch.setattr(
+        service.repository, "get_active_periods", lambda: [(1000000, "old", "Septiembre 2026")]
+    )
+    monkeypatch.setattr(service.repository, "get_period_by_name", lambda _: None)
+    monkeypatch.setattr(
+        service.repository,
+        "create_period",
+        lambda name, budget, active=False: {"id": "new", "name": name, "budget": budget},
+    )
+    monkeypatch.setattr(service.repository, "update_period_active", lambda *_: True)
+    resp = client.post(
+        "/budget/rollover?target_date=2026-10-01",
+        headers={"X-API-Key": "admin-secret"},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["created"] is True
+    assert data["period_name"] == "Octubre 2026"
+
+
+def test_rollover_endpoint_idempotent(monkeypatch):
+    monkeypatch.setattr(tasker_routes, "NOTION_ADMIN_API_KEY", "admin-secret")
+    monkeypatch.setattr(
+        service.repository, "get_active_periods", lambda: [(1000000, "old", "Septiembre 2026")]
+    )
+    monkeypatch.setattr(service.repository, "get_period_by_name", lambda _: {"id": "new"})
+    monkeypatch.setattr(service.repository, "update_period_active", lambda *_: True)
+    resp = client.post(
+        "/budget/rollover?target_date=2026-10-01",
+        headers={"X-API-Key": "admin-secret"},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["created"] is False
+
+
+def test_rollover_endpoint_conflict_on_double_active(monkeypatch):
+    monkeypatch.setattr(tasker_routes, "NOTION_ADMIN_API_KEY", "admin-secret")
+    monkeypatch.setattr(
+        service.repository,
+        "get_active_periods",
+        lambda: [(1000000, "a", "Septiembre 2026"), (1000000, "b", "Octubre 2026")],
+    )
+    resp = client.post(
+        "/budget/rollover?target_date=2026-10-01",
+        headers={"X-API-Key": "admin-secret"},
+    )
+    assert resp.status_code == 409
 
 
 def test_notion_requires_admin_key(monkeypatch):

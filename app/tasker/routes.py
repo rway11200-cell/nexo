@@ -29,6 +29,8 @@ def budget_rollover(
             raise HTTPException(status_code=400, detail="target_date must be YYYY-MM-DD") from error
     try:
         return service.rollover_period(parsed_date)
+    except service.RolloverIntegrityError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
     except RuntimeError as error:
         raise HTTPException(status_code=502, detail=str(error)) from error
 
