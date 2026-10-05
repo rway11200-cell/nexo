@@ -26,7 +26,8 @@ Tasker (Android) → HTTP GET → Railway (budget-webhook) → Notion DB Movimie
 | `/` | GET | Health check: `{"status": "ok", "service": "budget-webhook"}` |
 | `/health` | GET | Health check: `{"status": "ok"}` |
 | `/status` | GET | Resumen de presupuesto en JSON |
-| `/status/text` | GET | Resumen de presupuesto en texto plano (para Fosforito) |
+| `/status/text` | GET | Resumen corto: saldo, disponible diario, proyección y semáforo |
+| `/budget/rollover` | POST | Cierra el periodo anterior y activa/crea el periodo del mes objetivo (requiere `X-API-Key`) |
 | `/tasker` | GET | Detecta automáticamente CMR o Scotia |
 | `/tasker/cmr` | GET | Solo compras CMR (Banco Falabella) |
 | `/tasker/scotiabank` | GET | Solo pagos Scotia |
@@ -93,6 +94,7 @@ La DB "Movimientos" recibe:
 
 El webhook lee el presupuesto desde la DB **"Periodo"** en Notion:
 - Busca la página con `Activo = true` (ej: "Julio 2026")
+- El título del periodo está en la propiedad `Name`
 - Lee el campo `Presupuesto` (número)
 - Calcula: `Presupuesto - SUM(Monto de gastos con Periodo relation)`
 - Responde en Telegram con el saldo disponible
