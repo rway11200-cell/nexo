@@ -6,7 +6,6 @@ from app.config import DEBUG
 from app.tasker import repository
 
 CATEGORY_KEYWORDS = {
-
     "comida": [
         "restaurant", "starbucks", "café", "sushi", "pizza", "delivery",
         "pedidos", "super", "tottus", "lider", "jumbo", "mercado",
@@ -69,50 +68,104 @@ def parse_scotiabank(text: str) -> dict | None:
     return None
 
 
+class RolloverIntegrityError(RuntimeError):
+    """Raised when the Periodo table is in an inconsistent state."""
+
+
+class RolloverIncompleteError(RuntimeError):
+    """Raised when a previous rollover was interrupted and needs recovery."""
+
+
 def rollover_period(target_date: date | None = None) -> dict:
-    """Close the current Periodo and idempotently activate the target month."""
+    """Close the current Periodo and idempotently activate the target month.
+
+    Recovery rules:
+    - If the target period already exists and is the only active one, nothing to do.
+    - If there are 0 active periods but the target exists, activate it (repairs a
+      previously interrupted rollover) instead of aborting.
+    - If there are 0 active periods and no target, raise to avoid inventing one.
+    """
     now = target_date or datetime.now(ZoneInfo("America/Santiago")).date()
     months = (
         "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
         "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
     )
     target_name = f"{months[now.month - 1]} {now.year}"
-    active = repository.get_active_period()
+    active_periods = repository.get_active_periods()
+
+    if len(active_periods) > 1:
+        names = ", ".join(name or page_id for _, page_id, name in active_periods)
+        raise RolloverIntegrityError(
+            f"Hay más de un periodo activo ({len(active_periods)}): {names}. "
+            "Corrige Notion antes de continuar."
+        )
+
     existing = repository.get_period_by_name(target_name)
 
-    if existing:
+    if not active_periods:
+        if not existing:
+            raise RolloverIntegrityError(
+                "No hay ningún periodo activo y el periodo objetivo no existe. "
+                "Activa el periodo actual manualmente antes de hacer rollover."
+            )
         target_id = existing.get("id", "")
-        if active and active[1] != target_id:
-            if not repository.update_period_active(active[1], False):
-                raise RuntimeError("No se pudo cerrar el periodo activo anterior")
         if not repository.update_period_active(target_id, True):
-            raise RuntimeError("No se pudo activar el periodo objetivo")
-        budget = active[0] if active else 1_000_000
+            raise RolloverIncompleteError(
+                "El periodo objetivo existe pero no se pudo activar. "
+                "Verifica Notion manualmente."
+            )
+        budget = repository.get_budget_from_page(existing) or 0
         return {
             "ok": True,
             "created": False,
+            "repaired": True,
             "period_name": target_name,
             "period_id": target_id,
             "budget": budget,
-            "previous_period_id": active[1] if active and active[1] != target_id else None,
+            "previous_period_id": None,
         }
 
-    budget = active[0] if active else 1_000_000
-    created = repository.create_period(target_name, budget, active=False)
+    active_budget, active_id, _ = active_periods[0]
+
+    if existing:
+        target_id = existing.get("id", "")
+        if active_id != target_id:
+            if not repository.update_period_active(active_id, False):
+                raise RolloverIncompleteError("No se pudo cerrar el periodo activo anterior")
+        if not repository.update_period_active(target_id, True):
+            raise RolloverIncompleteError("No se pudo activar el periodo objetivo")
+        return {
+            "ok": True,
+            "created": False,
+            "repaired": False,
+            "period_name": target_name,
+            "period_id": target_id,
+            "budget": repository.get_budget_from_page(existing) or active_budget,
+            "previous_period_id": active_id if active_id != target_id else None,
+        }
+
+    created = repository.create_period(target_name, active_budget, active=False)
     if not created:
-        raise RuntimeError("No se pudo crear el periodo objetivo")
+        raise RolloverIncompleteError("No se pudo crear el periodo objetivo")
     target_id = created.get("id", "")
-    if active and not repository.update_period_active(active[1], False):
-        raise RuntimeError("El nuevo periodo fue creado, pero no se pudo cerrar el anterior")
+    if active_id and not repository.update_period_active(active_id, False):
+        raise RolloverIncompleteError(
+            "El nuevo periodo fue creado, pero no se pudo cerrar el anterior. "
+            "Ejecuta el rollover de nuevo para completar la recuperación."
+        )
     if not repository.update_period_active(target_id, True):
-        raise RuntimeError("El periodo fue creado, pero no se pudo activar")
+        raise RolloverIncompleteError(
+            "El periodo fue creado, pero no se pudo activar. "
+            "Ejecuta el rollover de nuevo para completar la recuperación."
+        )
     return {
         "ok": True,
         "created": True,
+        "repaired": False,
         "period_name": target_name,
         "period_id": target_id,
-        "budget": budget,
-        "previous_period_id": active[1] if active else None,
+        "budget": active_budget,
+        "previous_period_id": active_id if active_id else None,
     }
 
 
@@ -188,7 +241,7 @@ def format_budget_summary(
 
 
 def process_and_respond(amount: int, merchant: str, category: str, source: str) -> dict:
-    active = repository.get_active_period()
+    active = repository.get_active_period_lenient()
     period_page_id = active[1] if active else ""
     budget_val = active[0] if active else 1_000_000
 
