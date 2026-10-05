@@ -31,13 +31,17 @@ def budget_rollover(
         return service.rollover_period(parsed_date)
     except service.RolloverIntegrityError as error:
         raise HTTPException(status_code=409, detail=str(error)) from error
+    except service.RolloverIncompleteError as error:
+        raise HTTPException(status_code=502, detail=str(error)) from error
+    except service.repository.NotionUnavailableError as error:
+        raise HTTPException(status_code=502, detail=str(error)) from error
     except RuntimeError as error:
         raise HTTPException(status_code=502, detail=str(error)) from error
 
 
 @router.get("/status")
 def budget_status():
-    active = service.repository.get_active_period()
+    active = service.repository.get_active_period_lenient()
     period_page_id = active[1] if active else ""
     budget_val = active[0] if active else 1_000_000
     return service.get_budget_summary(period_page_id, budget_val)
@@ -45,7 +49,7 @@ def budget_status():
 
 @router.get("/status/text", response_class=PlainTextResponse)
 def budget_status_text():
-    active = service.repository.get_active_period()
+    active = service.repository.get_active_period_lenient()
     period_page_id = active[1] if active else ""
     budget_val = active[0] if active else 1_000_000
     summary = service.get_budget_summary(period_page_id, budget_val)
